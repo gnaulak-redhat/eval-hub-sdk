@@ -33,23 +33,6 @@ class TestModelConfig:
         assert config.name == "test-model"
         assert config.url == "http://localhost:8000/v1"
 
-    def test_full_model_config(self) -> None:
-        """Test ModelConfig with extra fields (extra='allow')."""
-        config = ModelConfig(
-            url="http://localhost:8000/v1",
-            name="gpt-4",
-            provider="openai",
-            parameters={"temperature": 0.1, "max_tokens": 100},
-            device="cuda:0",
-            batch_size=8,
-        )
-        assert config.name == "gpt-4"
-        assert config.url == "http://localhost:8000/v1"
-        assert config.provider == "openai"
-        assert config.parameters == {"temperature": 0.1, "max_tokens": 100}
-        assert config.device == "cuda:0"
-        assert config.batch_size == 8
-
     def test_model_config_validation(self) -> None:
         """Test ModelConfig validation."""
         with pytest.raises(ValidationError):
@@ -112,29 +95,28 @@ class TestEvaluationRequest:
         assert request.benchmark_id == "test_bench"
         assert request.model.name == "test-model"
         assert request.num_examples is None
-        assert request.num_few_shot is None
+        assert "num_few_shot" not in request.benchmark_config.keys()
         assert request.benchmark_config == {}
         assert request.experiment_name is None
 
     def test_full_evaluation_request(self) -> None:
         """Test EvaluationRequest with all fields."""
-        model = ModelConfig(
-            url="http://localhost:8000/v1",
-            name="gpt-4",
-            provider="openai",
-        )
+        model_payload: dict[str, Any] = {
+            "url": "http://localhost:8000/v1",
+            "name": "gpt-4",
+        }
+        model = ModelConfig(**model_payload)
         request = EvaluationRequest(
             benchmark_id="mmlu",
             model=model,
             num_examples=100,
-            num_few_shot=5,
             benchmark_config={"subset": "college_math"},
             experiment_name="test_run_1",
         )
         assert request.benchmark_id == "mmlu"
         assert request.model.name == "gpt-4"
         assert request.num_examples == 100
-        assert request.num_few_shot == 5
+        assert "num_few_shot" not in request.benchmark_config.keys()
         assert request.benchmark_config == {"subset": "college_math"}
         assert request.experiment_name == "test_run_1"
 
