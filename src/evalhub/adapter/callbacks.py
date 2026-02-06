@@ -7,10 +7,8 @@ from typing import Any
 from ..models.api import JobStatus
 from .models import (
     JobCallbacks,
-    JobPhase,
     JobResults,
     JobStatusUpdate,
-    MessageInfo,
     OCIArtifactResult,
     OCIArtifactSpec,
 )
@@ -33,6 +31,8 @@ class DefaultCallbacks(JobCallbacks):
         # Production (with evalhub for status updates)
         callbacks = DefaultCallbacks(
             job_id="my-job-123",
+            benchmark_id="mmlu",
+            provider_id="lm_evaluation_harness",
             sidecar_url="http://localhost:8080",
             registry_url="ghcr.io",
             registry_username=os.getenv("REGISTRY_USER"),
@@ -42,6 +42,7 @@ class DefaultCallbacks(JobCallbacks):
         # Local development (no evalhub, just logging)
         callbacks = DefaultCallbacks(
             job_id="my-job-123",
+            benchmark_id="mmlu",
             registry_url="localhost:5000",
             insecure=True
         )
@@ -54,6 +55,8 @@ class DefaultCallbacks(JobCallbacks):
     def __init__(
         self,
         job_id: str,
+        benchmark_id: str,
+        provider_id: str | None = None,
         sidecar_url: str | None = None,
         registry_url: str | None = None,
         registry_username: str | None = None,
@@ -68,6 +71,9 @@ class DefaultCallbacks(JobCallbacks):
 
         Args:
             job_id: Job identifier for API endpoint construction.
+            benchmark_id: Benchmark identifier for status event validation.
+            provider_id: Provider identifier (optional). If not provided, status updates
+                        will not include provider_id field.
             sidecar_url: URL of evalhub service for status updates (optional).
                         If None, status updates are logged locally.
             registry_url: OCI registry URL (e.g., "ghcr.io")
@@ -81,6 +87,8 @@ class DefaultCallbacks(JobCallbacks):
                           If not provided, auto-detects OpenShift/Kubernetes CA bundles
         """
         self.job_id = job_id
+        self.benchmark_id = benchmark_id
+        self.provider_id = provider_id
         self.sidecar_url = sidecar_url.rstrip("/") if sidecar_url else None
         self._events_path_template = (
             events_path_template
@@ -246,12 +254,22 @@ class DefaultCallbacks(JobCallbacks):
                 url = f"{self.sidecar_url}{self._events_path_template.format(job_id=self.job_id)}"
 
                 # Transform to eval-hub API format
-                data = {
-                    "status_event": {
-                        "state": update.status.value,
-                        "message": update.message.model_dump(mode="json"),
-                    }
+                status_event = {
+                    "benchmark_id": self.benchmark_id,
+                    "state": update.status.value,
+                    "status": update.status.value,
+                    "message": update.message.model_dump(mode="json"),
                 }
+
+                # Include error details for failed updates
+                if update.error:
+                    status_event["error_message"] = update.error.model_dump(mode="json")
+
+                # Include provider_id if available
+                if self.provider_id:
+                    status_event["provider_id"] = self.provider_id
+
+                data = {"status_event": status_event}
 
                 response = self._http_client.post(url, json=data, timeout=10.0)
                 response.raise_for_status()
@@ -306,21 +324,66 @@ class DefaultCallbacks(JobCallbacks):
     def report_results(self, results: JobResults) -> None:
         """Report final evaluation results to evalhub or log them.
 
+        This sends the complete results including metrics to the evalhub service.
+
         Args:
             results: Final job results to report
         """
-        # If evalhub available, send completed status event
+        # If evalhub available, send results with completed status event
         if self.sidecar_url and self._httpx_available and self._http_client:
-            completed_update = JobStatusUpdate(
-                status=JobStatus.COMPLETED,
-                phase=JobPhase.COMPLETED,
-                progress=1.0,
-                message=MessageInfo(
-                    message="Evaluation completed successfully",
-                    message_code="evaluation_completed",
-                ),
-            )
-            self.report_status(completed_update)
+            try:
+                url = f"{self.sidecar_url}{self._events_path_template.format(job_id=self.job_id)}"
+
+                # Convert evaluation results to metrics map
+                metrics = {}
+                for result in results.results:
+                    metrics[result.metric_name] = result.metric_value
+
+                # Build status event with results
+                status_event = {
+                    "benchmark_id": self.benchmark_id,
+                    "state": JobStatus.COMPLETED.value,
+                    "status": JobStatus.COMPLETED.value,
+                    "message": {
+                        "message": "Evaluation completed successfully",
+                        "message_code": "evaluation_completed",
+                    },
+                    "metrics": metrics,
+                    "completed_at": results.completed_at.isoformat(),
+                    "duration_seconds": int(results.duration_seconds),
+                }
+
+                # Include provider_id if available
+                if self.provider_id:
+                    status_event["provider_id"] = self.provider_id
+
+                # Include OCI artifact reference if available
+                if results.oci_artifact:
+                    status_event["artifacts"] = {
+                        "oci_reference": results.oci_artifact.reference,
+                        "oci_digest": results.oci_artifact.digest,
+                        "size_bytes": results.oci_artifact.size_bytes,
+                    }
+
+                data = {"status_event": status_event}
+
+                response = self._http_client.post(url, json=data, timeout=10.0)
+                response.raise_for_status()
+
+                logger.info(
+                    f"Results reported to evalhub | "
+                    f"Metrics: {len(metrics)} | "
+                    f"Score: {results.overall_score}"
+                )
+
+            except self.httpx.HTTPStatusError as e:
+                logger.error(
+                    f"Failed to send results to evalhub (HTTP {e.response.status_code}): {e}"
+                )
+                # Fall through to local logging
+            except Exception as e:
+                logger.error(f"Failed to send results to evalhub: {e}")
+                # Fall through to local logging
 
         # Local logging
         logger.info(
