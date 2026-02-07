@@ -80,8 +80,9 @@ class BenchmarkInfo(BaseModel):
     supports_few_shot: bool = Field(
         default=True, description="Whether benchmark supports few-shot evaluation"
     )
-    default_few_shot: int | None = Field(
-        default=None, description="Default number of few-shot examples"
+    num_few_shot: int | None = Field(
+        default=None,
+        description="Default number of few-shot examples",
     )
     custom_config_schema: dict[str, Any] | None = Field(
         default=None, description="JSON schema for custom benchmark configuration"
