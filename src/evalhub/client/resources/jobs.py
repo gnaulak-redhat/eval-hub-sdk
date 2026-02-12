@@ -221,9 +221,7 @@ class SyncJobsResource:
             params = {}
             if hard_delete:
                 params["hard_delete"] = "true"
-            self._client._request_delete(
-                f"/evaluations/jobs/{job_id}", params=params
-            )
+            self._client._request_delete(f"/evaluations/jobs/{job_id}", params=params)
             return True
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:

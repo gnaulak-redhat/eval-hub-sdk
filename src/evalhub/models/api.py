@@ -216,6 +216,7 @@ class BenchmarkResult(BaseModel):
 
 class EvaluationJobResults(BaseModel):
     """Results from an evaluation job."""
+
     benchmarks: list[BenchmarkResult] = Field(
         default_factory=list, description="Benchmark results"
     )
