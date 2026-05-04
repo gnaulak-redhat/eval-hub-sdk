@@ -205,6 +205,7 @@ class TestCollectionsDescribe:
         assert result.exit_code == 0
         assert "RAG Safety" in result.output
         assert "rag-safety" in result.output
+        assert "Category:    leaderboard" in result.output
         assert "Benchmarks (2)" in result.output
         assert "mmlu" in result.output
         assert "toxicity" in result.output
