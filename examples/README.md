@@ -1,5 +1,42 @@
 # How to run the examples
 
+## OCI job exports
+
+[oci_job.yaml](oci_job.yaml) demonstrates CLI usage with a local mode server,
+Ollama running locally with the model `llama3.2:3b-instruct-q4_K_M` at
+`http://localhost:11434/v1`, and an anonymous OCI registry at
+`http://localhost:5001`. The CLI defaults to `http://localhost:8080`.
+The example limits `gsm8k` to five examples to reduce runtime. Replace the
+provider ID if your configured provider supporting `gsm8k` has a different ID.
+
+```yaml
+model:
+  url: http://localhost:11434/v1
+  name: llama3.2:3b-instruct-q4_K_M
+benchmarks:
+  - id: gsm8k
+    provider_id: 5f1ee53f-35e6-44ca-bc6a-d4c28e2c0f97
+    parameters:
+      num_examples: 5
+```
+
+```shell
+evalhub eval run --config examples/oci_job.yaml
+evalhub eval status <job-id>
+```
+
+Evaluation waits can finish before OCI publication finishes. Run
+`evalhub eval status <job-id>` again to check the OCI state. An OCI publication
+failure does not change a completed evaluation into a failed evaluation.
+Current OCI completion covers evaluation-card publication; bundle publication
+and signing are future work.
+
+Human-readable status shows only the OCI state; results omit OCI reporting.
+Use `evalhub eval status <job-id> --format json` (or `--format yaml`) for
+complete OCI information, including messages and published artifact references.
+Additional OCI fields in human-readable status or results can be considered
+in a future change if user feedback requires them.
+
 ## Watching logs
 
 **File:** [watch_job_logs.py](watch_job_logs.py)

@@ -451,6 +451,78 @@ with SyncEvalHubClient() as client:
 
 ## Examples
 
+### Job-level OCI configuration and outcomes
+
+OCI export accepts optional signing settings in Python job requests and in
+YAML/JSON job configuration files submitted with `evalhub eval run --config`.
+The complete YAML example is
+[examples/oci_job.yaml](examples/oci_job.yaml), for a local mode server using
+the CLI's default `http://localhost:8080` endpoint.
+
+**Future work: OCI signing.** The server does not execute signing yet. The SDK
+and CLI accept signing settings for future server support; supplying them does
+not sign the published artifacts.
+
+In Python SDK job requests, configure OCI export with or without signing:
+
+```python
+from evalhub import EvaluationExportsOCI, OCICoordinates, OCISigningConfig
+
+coordinates = OCICoordinates(oci_host="quay.io", oci_repository="my-org/eval-results")
+without_signing = EvaluationExportsOCI(coordinates=coordinates)
+with_secret = EvaluationExportsOCI(
+    coordinates=coordinates,
+    signing=OCISigningConfig(type="key-pair", secret_ref="my-signing-secret"),
+)
+```
+
+Signing is optional. Currently, the accepted signing type is `key-pair`,
+which requires `secret_ref` for the signing key. Additional signing types may
+be supported in the future.
+
+`exports.oci.k8s.connection` references registry authentication credentials.
+`exports.oci.signing.secret_ref` names a tenant namespace Kubernetes Secret
+containing `private.key`. Dedicated signing flags are not available; use a
+Python job request or `eval run --config`. When `--config` is supplied, the file
+provides the complete job request and other job-related flags are ignored.
+
+Evaluation and OCI publication have independent outcomes. An evaluation can
+complete while its evaluation card is still being published, and a publication
+failure does not change a completed evaluation into a failed evaluation.
+OCI `completed` currently means the evaluation card was published; bundle
+publication and signing are future work.
+
+```shell
+evalhub eval run --config examples/oci_job.yaml
+evalhub eval status <job-id>
+evalhub eval status <job-id> --format json
+evalhub eval results <job-id>
+```
+
+Human-readable status shows only the OCI state:
+
+```text
+OCI:
+  State: completed
+```
+
+Configured OCI export without a reported status is shown as unavailable.
+Jobs without OCI configuration or results omit this section. Job lists include an `oci_state`
+column; `--status` filters the evaluation state.
+
+`eval results` shows benchmark results and omits OCI reporting. Use
+`eval status <job-id> --format json` or `--format yaml` for complete OCI
+information, including messages and published artifact references.
+Additional OCI fields in human-readable status or results can be considered
+in a future change if user feedback requires them.
+
+SDK waits, `eval run --wait`, status watches, and log following stop when the
+evaluation finishes, which may be before OCI publication finishes. Fetch the
+job again with `client.jobs.get(job.id)` (or `await client.jobs.get(job.id)`),
+or run `evalhub eval status <job-id>` again to check the OCI outcome.
+When wait and log-follow summaries include OCI information, they show only
+its state.
+
 ### Watch job logs
 
 Stream workload logs while a job runs using the client API or the example script:
