@@ -672,7 +672,7 @@ class JobSubmissionRequest(BaseModel):
     )
     queue: QueueConfig | None = Field(
         default=None,
-        description="Optional scheduling queue for Kubernetes-backed evaluation jobs (e.g. Kueue).",
+        description="Deprecated: use hardware_config.queue instead. Retained as a backward-compatible scheduling queue fallback.",
     )
     hardware_config: BenchmarkHardwareConfig | None = Field(
         default=None,
@@ -725,7 +725,11 @@ class EvaluationJob(BaseModel):
     )
     queue: QueueConfig | None = Field(
         default=None,
-        description="Optional scheduling queue for Kubernetes-backed evaluation jobs (e.g. Kueue).",
+        description="Deprecated: use hardware_config.queue instead. Retained as a backward-compatible scheduling queue fallback.",
+    )
+    hardware_config: BenchmarkHardwareConfig | None = Field(
+        default=None,
+        description="Default hardware configuration for benchmarks without their own hardware_config",
     )
 
     # Convenience properties to access nested fields

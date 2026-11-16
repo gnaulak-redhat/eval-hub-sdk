@@ -164,6 +164,40 @@ class TestEvaluationJob:
         assert job.benchmarks is not None
         assert job.benchmarks[0].id == "test"
         assert job.resource.created_at == now
+        assert job.hardware_config is None
+        assert "hardware_config" not in job.model_dump(exclude_none=True)
+
+    @pytest.mark.parametrize(
+        "hardware_config",
+        [
+            {"hardware_profile_name": "gpu-profile"},
+            {"cpu": {"request": "2"}, "queue": {"name": "eval-queue"}},
+        ],
+    )
+    def test_hardware_config_response_round_trip(
+        self, hardware_config: dict[str, Any]
+    ) -> None:
+        payload = {
+            "resource": {
+                "id": "job-hardware",
+                "created_at": "2026-01-01T00:00:00Z",
+            },
+            "name": "hardware-eval",
+            "model": {"name": "test-model"},
+            "benchmarks": [{"id": "mmlu", "provider_id": "lm_eval"}],
+            "hardware_config": hardware_config,
+        }
+
+        job = EvaluationJob.model_validate(payload)
+
+        assert job.hardware_config == BenchmarkHardwareConfig.model_validate(
+            hardware_config
+        )
+        assert job.benchmarks is not None
+        assert job.benchmarks[0].hardware_config is None
+        serialized = job.model_dump(mode="json", exclude_none=True)
+        assert serialized["hardware_config"] == hardware_config
+        assert EvaluationJob.model_validate(serialized) == job
 
     def test_completed_evaluation_job(self) -> None:
         """Test completed EvaluationJob."""
